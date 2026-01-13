@@ -66,8 +66,8 @@ variable "enable_cloudwatch_logging" {
 
 variable "bucket_lifecycle_days" {
   description = "Number of days after which objects in the tutorial will be deleted"
-  type       = number
-  default    = 7
+  type        = number
+  default     = 7
 
   validation {
     condition     = var.bucket_lifecycle_days > 0 && var.bucket_lifecycle_days <= 365
@@ -77,8 +77,8 @@ variable "bucket_lifecycle_days" {
 
 variable "cloudwatch_log_retention_days" {
   description = "Number of days to retain CloudWatch logs"
-  type = number
-  default = 7
+  type        = number
+  default     = 7
   validation {
     condition = contains([
       1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1827, 3653
@@ -94,9 +94,115 @@ variable "enable_s3_versioning" {
 }
 
 variable "enable_bucket_encryption" {
-  description = "Server-side encryption for S3 bucket"
+  description = "Whehter to enable server-side encryption for the S3 bucket"
   type        = bool
   default     = true
 }
 
+variable "encryption_algorithm" {
+  description = "Server-side encryption alogorithm for S3 bucket"
+  type        = string
+  default     = "AES256"
 
+  validation {
+    condition     = contains(["AES256", "aws:kms"], var.encryption_algorithm)
+    error_message = "Encryption algorithm must be either 'AES256' or 'aws:kms'."
+  }
+}
+
+variable "kms_key_id" {
+  description = "KMS key ID for S3 bucket encryption (only used if encryption_algorithm is 'aws:kms')"
+  type        = string
+  default     = null
+}
+
+variable "enable_public_access_block" {
+  description = "Whether to enable S3 public access block setting for security"
+  type        = bool
+  default     = true
+}
+
+variable "tags" {
+  description = "Additional tag to apply to all resources"
+  type        = map(string)
+  default     = {}
+
+  validation {
+    condition     = length(keys(var.tags)) <= 10
+    error_message = "Cannot specify more than 10 additional tags."
+  }
+}
+
+variable "aws_region" {
+  description = "AWS region for resources (if not specified, will use provider default)."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.aws_region == null || can(regex("^[a-z]{2}-[a-z]+-[0-9]$", var.aws_region))
+    error_message = "AWS region must be in the format 'us-east-1', 'eu-west-1', etc."
+  }
+}
+
+variable "bucket_force_destroy" {
+  description = "Whether to force destroy the S3 bucket even it it contains objects."
+  type        = bool
+  default     = false
+}
+
+variable "create_sample_directories" {
+  description = "Whether to create sample diretoy structure in S3 for CLI practice"
+  type        = bool
+  default     = true
+}
+
+variable "sample_file_content_type" {
+  description = "Content type for sample files created in S3"
+  type        = string
+  default     = "text/plain"
+
+  validation {
+    condition     = can(regex("^[a-z]+/[a-z]+$", var.sample_file_content_type))
+    error_message = "Content type must be in format 'type/subtype' (e.g., 'text/plain')."
+  }
+}
+
+variable "enable_access_logging" {
+  description = "Whether to enable S3 access logging for the tutorial bucket"
+  type        = bool
+  default     = false
+}
+
+variable "access_log_bucket_prefix" {
+  description = "Prefix for S3 access log bucket (only if enable_access_logging is true)"
+  type        = string
+  default     = "aws-cli-tutorial_access-logs"
+}
+
+variable "notification_email" {
+  description = "Email address for CloudWatch alarm notifications (optional)"
+  type        = string
+  default     = null
+
+  validation {
+    condition = var.notification_email == null || can(regex("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$", var.notification_email))
+    error_message = "Notification email must be a valid email address format."
+  }
+}
+
+variable "create_cli_user" {
+  description = "Whether to create a dedicated IAM user for CLI tutorial practice"
+  type        = bool
+  default     = false
+}
+
+variable "cli_user_name" {
+  description = "Name for the CLI tutorial IAM user (only used if create_cli_user is true)"
+  type        = string
+  default     = "aws-cli-tutorial-user"
+
+  validation {
+    condition     = can(regex("^[a-zA-Z0-9+=,.@_-]{1,64}$", var.cli_user_name))
+    error_message = "CLI user name must be 1-64 characters and contain only alphanumeric characters and +=,.@_- symbols."
+  }
+}
