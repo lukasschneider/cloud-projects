@@ -125,3 +125,67 @@ output "configuration_summary" {
     environment = var.environment
   }
 }
+
+# Resource Tags Applied 
+output "resource_tags" {
+  description = "Common tags applied to resources"
+  value = merge({
+    Name = "AWS CLI Tutorial Infrastructure"
+    Purpose = "AWS CLI Leaning and Practice"
+    Environment = var.environment
+    Recipe = "aws-cli-setup-fist-commands"
+    ManagedBy = "Terraform"
+  }, var.tags)
+}
+
+# Security Information
+output "security_features" {
+  value = {
+    s3_bucket_encryption = var.enable_bucket_encryption ? "Enabled (${var.encryption_algorithm})" : "Disabled"
+    s3_public_access_block = var.enable_public_access_block ? "Enabled" : "Disabled"
+    s3_versioning =  var.enable_s3_versioning ? "Enabled" : "Disabled"
+    iam_policy_restrictions = "Enabled - Policy grants minimal S3 permissions"
+    lifecyle_cleanup = "Enabled - Objects deleted after ${var.bucket_lifecycle_days} days"
+    resource_tagging = "Enabled - All resources tagged for identification"
+  }
+}
+
+# Learning Resources
+output "learning_resources" {
+  description = "Helpful links and commands for AWS CLI learning"
+  value = {
+    aws_cli_user_guide      = "https://docs.aws.amazon.com/cli/latest/userguide/"
+    s3_cli_reference        = "https://docs.aws.amazon.com/cli/latest/reference/s3/"
+    s3api_cli_reference     = "https://docs.aws.amazon.com/cli/latest/reference/s3api/"
+    aws_configuration_guide = "https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html"
+    jmespath_tutorial      = "https://jmespath.org/tutorial.html"
+    help_command           = "aws s3 help"
+    help_subcommand        = "aws s3 cp help"
+  }
+}
+
+# Cost Optimization Information
+output "cost_optimization" {
+  description = "Information about cost optimization features"
+  value = {
+    lifecycle_policy = "Enabled - Objects deleted after ${var.bucket_lifecycle_days} days to minimize storage costs"
+    versioning_cleanup = "Enabled - Non-current versions deleted after 1 day"
+    multipart_upload_cleanup = "Enabled - Incomplete upload cleanup after 1 day"
+    estimated_monthly_cost = "Minimal - S3 storage and request charges only, typically < $1/month for tutorial use"
+    cost_monitoring_tip = "Use 'aws ce get-cost-and-usage' CLI command to monitor costs"
+  }
+}
+
+# Troubleshooting Information
+output "troubleshooting" {
+  description = "Common troubleshooting commands and tips"
+  value = {
+    check_credentials = "aws sts get-caller-identity"
+    check_region = "aws configure get region"
+    list_profiles = "aws configure list-profiles"
+    check_permissions = "aws iam simulate-principal-policy --policy-source-arn <your-arn> --action names s3:ListBucket --resource-arns ${aws_s3_bucket.cli_tutorial_bucket.arn}"
+    bucket_exists_check = "aws s3api head-bucket --bucket ${aws_s3_bucket.cli_tutorial_bucket.id}"
+    debug_mode = "aws s3 ls --debug"
+    common_error_solution = "Ensure AWS credentials are configured and your have proper permissions"
+  } 
+}
