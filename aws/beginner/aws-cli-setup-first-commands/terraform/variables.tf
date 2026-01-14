@@ -13,13 +13,13 @@ variable "bucket_prefix" {
   }
 }
 
-variable "environments" {
+variable "environment" {
   description = "Environments name (e.g. dev, staging, prod, tutorial)."
   type        = string
   default     = "tutorial"
 
   validation {
-    condition     = can(regex("^[a-zA-Z0-9_-]{1,20}$", var.environments))
+    condition     = can(regex("^[a-zA-Z0-9_-]{1,20}$", var.environment))
     error_message = "Environment must be alphanumeric with hyphens, maximum 20 characters."
   }
 }
