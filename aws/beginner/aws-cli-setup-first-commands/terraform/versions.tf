@@ -5,18 +5,21 @@
 
 terraform {
   required_version = ">= 1.5.0"
-  
+
   required_providers {
-    source = "hashicorp/aws"
-    version = "~> 5.0"
+    # AWS Provider for managing AWS resources
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
     # Random Provider for generating unique identifiers
     random = {
-      source = "hashicorp/random"
+      source  = "hashicorp/random"
       version = "~> 3.4"
     }
 
     local = {
-      source = "hashicorp/local"
+      source  = "hashicorp/local"
       version = "~> 2.4"
     }
   }
@@ -42,10 +45,10 @@ provider "aws" {
   # Optional Add common tags to all resources created by this provider
   default_tags {
     tags = {
-      Project = "AWS CLI Tutorial"
-      Recipe = "aws-cli-setup-first-commands"
-      ManagedBy = "Terraform"
-      Repository = "https://github.com/lukasschneider/cloud-projects"
+      Project      = "AWS CLI Tutorial"
+      Recipe       = "aws-cli-setup-first-commands"
+      ManagedBy    = "Terraform"
+      Repository   = "https://github.com/lukasschneider/cloud-projects"
       Documenation = "/aws/beginner/aws-cli-setup-first-commands/README.md"
     }
   }

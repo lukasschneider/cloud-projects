@@ -185,7 +185,7 @@ variable "notification_email" {
   default     = null
 
   validation {
-    condition = var.notification_email == null || can(regex("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$", var.notification_email))
+    condition     = var.notification_email == null || can(regex("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$", var.notification_email))
     error_message = "Notification email must be a valid email address format."
   }
 }

@@ -3,19 +3,19 @@
 # including an S3 bucket with proper security configurations and IAM resources
 
 # Configure the AWS provider
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.4"
-    }
-  }
-  required_version = ">= 1.5"
-}
+# terraform {
+#   required_providers {
+#     aws = {
+#       source  = "hashicorp/aws"
+#       version = "~> 5.0"
+#     }
+#     random = {
+#       source  = "hashicorp/random"
+#       version = "~> 3.4"
+#     }
+#   }
+#   required_version = ">= 1.5"
+# }
 
 # Data soruce to get current AWS caller identity
 data "aws_caller_identity" "current" {}
@@ -33,11 +33,11 @@ resource "aws_s3_bucket" "cli_tutorial_bucket" {
   bucket = "${var.bucket_prefix}-${random_id.bucket_suffix.hex}"
 
   tags = {
-    Name = "AWS CLI Tutorial Bucket"
-    Purpose = "AWS CLI Leaning and Practice"
+    Name        = "AWS CLI Tutorial Bucket"
+    Purpose     = "AWS CLI Leaning and Practice"
     Environment = var.environment
-    Recipe = "aws-cli-setup-first-commands"
-    ManagedBy = "Terraform"
+    Recipe      = "aws-cli-setup-first-commands"
+    ManagedBy   = "Terraform"
   }
 }
 
@@ -65,25 +65,28 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "cli_tutorial_buck
 resource "aws_s3_bucket_public_access_block" "cli_tutorial_bucket_pab" {
   bucket = aws_s3_bucket.cli_tutorial_bucket.id
 
-  block_public_acls = true
-  block_public_policy = true
-  ignore_public_acls = true
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
   restrict_public_buckets = true
 }
 
 # Configure S3 bucket lifecycle to manage costs and demostrate best practice
 resource "aws_s3_bucket_lifecycle_configuration" "cli_tutorial_bucket_lifecycle" {
-  bucket = aws_s3_bucket.cli_tutorial_bucket.id 
+  bucket = aws_s3_bucket.cli_tutorial_bucket.id
 
   rule {
-    id = "tutorial_cleanup"
+    id     = "tutorial_cleanup"
     status = "Enabled"
+
+    # REQUIRED: apply rule to all objects
+    filter {}
 
     # Delete objects after 7 days to avoid costs for tutorial
     expiration {
       days = 7
     }
-    
+
     # Delete non-current versions after 1 day
     noncurrent_version_expiration {
       noncurrent_days = 1
@@ -96,9 +99,9 @@ resource "aws_s3_bucket_lifecycle_configuration" "cli_tutorial_bucket_lifecycle"
   }
 }
 
-# Create IAM policy for S4 access (for CLI users)
+# Create IAM policy for S3 access (for CLI users)
 resource "aws_iam_policy" "cli_tutorial_s3_policy" {
-  name = "${var.iam_policy_prefix}-s3-access"
+  name        = "${var.iam_policy_prefix}-s3-access"
   description = "Policy for AWS CLI tutorial S3 access"
 
   policy = jsonencode({
@@ -129,9 +132,180 @@ resource "aws_iam_policy" "cli_tutorial_s3_policy" {
   })
 
   tags = {
-    Name = "AWS CLI Tutorial S3 Policy"
-    Purpose = "AWS CLI Learning and Practice"
+    Name      = "AWS CLI Tutorial S3 Policy"
+    Purpose   = "AWS CLI Learning and Practice"
+    Recipe    = "aws-cli-setup-first-commands"
+    ManagedBy = "Terraform"
+  }
+}
+
+# Create IAM role for eC2 instance (if users want to practice from EC2)
+resource "aws_iam_role" "cli_tutorial_ec2_role" {
+  count = var.create_ec2_role ? 1 : 0
+  name = "${var.iam_role_prefix}-ec2-cli-tutorial"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "ec2.amazonaws.com"
+        }
+      }
+    ]
+  })
+
+  tags = {
+    Name = "AWS CLI Tutorial EC2 Role"
+    Purpose = "AWS CLI Learning from EC2"
     Recipe = "aws-cli-setup-first-commands"
     ManagedBy = "Terraform"
   }
 }
+
+# Attach S3 policy to EC2 role
+resource "aws_iam_role_policy_attachment" "cli_tutorial_ec2_role_policy" {
+  count = var.create_ec2_role ? 1 : 0
+  role = aws_iam_role.cli_tutorial_ec2_role[0].name
+  policy_arn = aws_iam_policy.cli_tutorial_s3_policy.arn
+}
+
+# Create instance profile for EC2 role
+resource "aws_iam_instance_profile" "cli_tutorial_ec2_profile" {
+  count = var.create_ec2_role ? 1 : 0
+  name = "${var.iam_role_prefix}-ec2-cli-tutorial-profile"
+  role = aws_iam_role.cli_tutorial_ec2_role[0].name
+
+  tags = {
+    Name = "AWS CLI Tutorial EC2 Instance Profile"
+    Purpose = "AWS CLI Learning from EC2"
+    Recipe = "aws-cli-setup-first-commands"
+    ManagedBy = "Terraform"
+  }
+}
+
+# Create sample objects in S3 bucket to demonstrate CLI operations
+resource "aws_s3_object" "sample_file" {
+  count  = var.create_sample_objects ? 1 : 0
+  bucket = aws_s3_bucket.cli_tutorial_bucket.id
+  key    = "sample-files/welcome.txt"
+  content = templatefile("${path.module}/templates/welcome.txt.tpl", {
+    bucket_name = aws_s3_bucket.cli_tutorial_bucket.id
+    aws_region  = data.aws_region.current.name
+    account_id  = data.aws_caller_identity.current.account_id
+  })
+  content_type = "text/plain"
+
+  metadata = {
+    purpose    = "aws-cli-tutorial"
+    created-py = "terraform"
+    recipe     = "aws-cli-setup-first-commands"
+  }
+
+  tags = {
+    Name      = "CLI Tutorial Sample File"
+    Purpose   = "AWS CLI Learning"
+    Recipe    = "aws-cli-setup-first-commands"
+    ManagedBy = "Terraform"
+  }
+}
+
+# Create a directory strucuture wiht multiple sample files
+resource "aws_s3_object" "sample_json_file" {
+  count  = var.create_sample_objects ? 1 : 0
+  bucket = aws_s3_bucket.cli_tutorial_bucket.id
+  key    = "sample-files/config.json"
+  content = jsonencode({
+    tutorial = {
+      name        = "AWS CLI Setup and First Commands"
+      bucket_name = aws_s3_bucket.cli_tutorial_bucket.id
+      aws_region  = data.aws_region.current.name
+      version     = "1.0"
+    }
+    commands = [
+      "aws s3 ls",
+      "aws s3 cp",
+      "aws s3api head-bucket",
+      "aws sts get-caller-identity"
+    ]
+  })
+  content_type = "application/json"
+
+  metadata = {
+    purpose    = "aws-cli-tutorial"
+    created-by = "terraform"
+    file-type  = "configuration"
+  }
+
+  tags = {
+    Name      = "CLI Tutorial JSON Config"
+    Purpose   = "AWS CLI Learning"
+    Recipe    = "aws-cli-setup-first-commands"
+    ManagedBy = "Terraform"
+  }
+}
+
+# Create a logs directory structure for practicing CLI commands
+resource "aws_s3_object" "logs_directory" {
+  count        = var.create_sample_objects ? 1 : 0
+  bucket       = aws_s3_bucket.cli_tutorial_bucket.id
+  key          = "logs/"
+  content_type = "application/x-directory"
+
+  tags = {
+    Name      = "CLI Tutorial Logs Directory"
+    Purpose   = "AWS CLI Learning"
+    Recipe    = "aws-cli-setup-first-commands"
+    ManagedBy = "Terraform"
+  }
+}
+
+# Create CloudWatch log Group for monitoring CLI activities (optional)
+resource "aws_cloudwatch_log_group" "cli_tutorial_logs" {
+  count             = var.enable_cloudwatch_logging ? 1 : 0
+  name              = "/aws/cli-tutorial/${random_id.bucket_suffix.hex}"
+  retention_in_days = var.cloudwatch_log_retention_days
+
+  tags = {
+    Name        = "CLI Tutorial Logs"
+    Purpose     = "AWS CLI Learning and MOnitoring"
+    Environment = var.environment
+    Recipe      = "aws-cli-setup-first-commands"
+    ManagedBy   = "Terraform"
+  }
+}
+
+# Create template file for welcome message
+resource "local_file" "welcome_template" {
+  count    = var.create_sample_objects ? 1 : 0 # Only create if sample objects are enabled
+  filename = "${path.module}/templates/welcome.txt.tpl"
+  content  = <<EOT
+  
+  Welcome to the AWS CLI Tutorial!
+
+  This file was created by Terraform to help you practice AWS CLI commands.
+
+  Bukcket Information:
+  - Bucker Name: ${"{bucket_name}"}
+  - AWS Region: ${"{aws_region}"}
+  - Account ID: ${"{account_id}"}
+
+  Practice Commands:
+  1. List bucket contents: aws s3 ls s3://${"{bucket_name}"}/
+  2. Copy this file: aws s3 cp s3://${"{bucket_name}"}/sample-files/welcome.txt .
+  3. Get bucket location: aws s3api get-bucket-location --bucket ${"{bucket_name}"}
+  4. Check encryption: aws s3api get-bucket-encryption --bucket ${"{bucket_name}"}
+
+  Happy Learning!
+  Generated on: $(date)
+  EOT
+
+  depends_on = [aws_s3_object.sample_file]
+}
+
+
+
+
+
