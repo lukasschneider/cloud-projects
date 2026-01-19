@@ -182,8 +182,8 @@ graph TB
     aws s3api list-objects-v2 --bucket <your-bucket-name>  
 
     # Use JMESPath query to extract specific dta
-    aws s3api list-objects v2 --bucket <your-bucket-name> \
-        --query "Contents[].{Name:Key,Size:Size,Modified:LastModified" \
+    aws s3api list-objects-v2 --bucket <your-bucket-name> \
+        --query "Contents[].{Name:Key,Size:Size,Modified:LastModified}" \
         --output table
 
     # Check bucket encryption configuration
