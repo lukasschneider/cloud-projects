@@ -23,11 +23,11 @@ locals {
       ManagedBy   = "Terraform"
       Recipe      = "simple-file-backup-notifications-s3-sns"
     },
-    var.custom_tags,
+    var.tags,
   )
 
   # Generate unique resource names
-  bucket_name = "${var.s3_bucket_prefix}-${random_string.suffix.result}"
+  bucket_name    = "${var.s3_bucket_prefix}-${random_string.suffix.result}"
   sns_topic_name = "${var.sns_topic_name}-${random_string.suffix.result}"
 }
 
@@ -37,12 +37,12 @@ resource "aws_sns_topic" "backup_notifications" {
   delivery_policy = jsonencode({
     "http" : {
       "defaultHealthyRetryPolicy" : {
-        "minDelayTarget" : 20,  # Minimum delay of 20 seconds
-        "maxDelayTarget" : 20,  # Maximum delay of 20 seconds
-        "numRetries" : 3,       # Retry up to 3 times
-        "numMaxDelayRetries" : 0, # No maximum delay retries
-        "numMinDelayRetries" : 0, # No minimum delay retries
-        "numNoDelayRetries" : 0, # No immediate retries
+        "minDelayTarget" : 20,       # Minimum delay of 20 seconds
+        "maxDelayTarget" : 20,       # Maximum delay of 20 seconds
+        "numRetries" : 3,            # Retry up to 3 times
+        "numMaxDelayRetries" : 0,    # No maximum delay retries
+        "numMinDelayRetries" : 0,    # No minimum delay retries
+        "numNoDelayRetries" : 0,     # No immediate retries
         "backoffFunction" : "linear" # Linear backoff strategy
       },
       "disableSubscriptionOverrides" : false, # Allow subscription overrides
@@ -61,12 +61,12 @@ resource "aws_sns_topic_policy" "backup_notifications_policy" {
     "Version" : "2012-10-17",
     Statement : [
       {
-        Sid = "AllowS3Publish",
+        Sid    = "AllowS3Publish",
         Effect = "Allow",
         Principal = {
           Serivice = "s3.amazonaws.com"
         },
-        Action = "SNS:Publish",
+        Action   = "SNS:Publish",
         Resource = aws_sns_topic.backup_notifications.arn,
         Condition = {
           StringEquals = {
@@ -87,9 +87,9 @@ resource "aws_sns_topic_subscription" "email_notifications" {
   count = length(var.email_addresses)
 
   topic_arn = aws_sns_topic.backup_notifications.arn
-  protocol = "email"
-  endpoint = var.email_addresses[count.index]
-  
+  protocol  = "email"
+  endpoint  = var.email_addresses[count.index]
+
   # Prevent Terraform from trying to confirm the subscriptions
   confirmation_timeout_in_minutes = 1
 }
@@ -147,4 +147,142 @@ resource "aws_s3_bucket_public_access_block" "backup_bucket_pab" {
   restrict_public_buckets = true
 }
 
+# S3 Bucket Lifecycle Configuration
+# Automatically manages object lifecycle for cost optimization
+resource "aws_s3_bucket_lifecycle_configuration" "backup_bucket_lifecycle" {
+  count = var.s3_lifecycle_expiration_days > 0 ? 1 : 0
 
+  bucket = aws_s3_bucket.backup_bucket.id
+
+  rule {
+    id     = "backup_file_expiration"
+    status = "Enabled"
+
+    expiration {
+      days = var.s3_lifecycle_expiration_days
+    }
+
+    # Also clean up incomplete multipart uploads
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+
+    # Handle versioned objects if versioning is enabled
+    dynamic "noncurrent_version_expiration" {
+      for_each = var.enable_s3_versioning ? [1] : []
+      content {
+        noncurrent_days = var.s3_lifecycle_expiration_days
+      }
+    }
+  }
+}
+
+# S3 Bucket Notification Configuration
+# Configures S3 to send events to SNS topic when objects are created
+resource "aws_s3_bucket_notification" "backup_notifications" {
+  bucket = aws_s3_bucket.backup_bucket.id
+
+  # Wait for SNS Topic policy to be applied
+  depends_on = [aws_sns_topic_policy.backup_notifications_policy]
+
+  topic {
+    topic_arn = aws_sns_topic.backup_notifications.arn
+    events    = var.notification_event_types
+    id        = "BackupNotification"
+  }
+}
+
+# Optional: CloudTrail for S3 bucket access logging
+# Creates a CloudTrail to log all API calls to the S3 bucket
+resource "aws_cloudtrail" "s3_access_trail" {
+  count = var.enable_cloudtrail_logging ? 1 : 0
+
+  name                          = "${local.bucket_name}-access-trail"
+  s3_bucket_name                = aws_s3_bucket.backup_bucket.id
+  s3_key_prefix                 = "cloudtrail-logs/"
+  include_global_service_events = false
+  is_multi_region_trail         = false
+  enable_logging                = true
+
+  event_selector {
+    read_write_type                  = "All"
+    include_management_events        = false
+    exclude_management_event_sources = []
+
+    data_resource {
+      type   = "AWS::S3::Object"
+      values = ["${aws_s3_bucket.backup_bucket.arn}/*"]
+    }
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "S3 Backup Bucket Access Trail"
+    Type = "Logging"
+  })
+}
+
+# CloudTrail logs bucket (only created if CloudTrail is enabled)
+resource "aws_s3_bucket" "cloudtrail_logs" {
+  count = var.enable_cloudtrail_logging ? 1 : 0
+
+  bucket = "${local.bucket_name}-cloudtrail-logs"
+
+  tags = merge(local.common_tags, {
+    Name = "CloudTrail Logs Bucket"
+    Type = "Logging"
+  })
+}
+
+# CloudTrail logs bucket policy 
+resource "aws_s3_bucket_policy" "cloudtrail_logs_policy" {
+  count = var.enable_cloudtrail_logging ? 1 : 0
+
+  bucket = aws_s3_bucket.cloudtrail_logs[0].id
+
+  policy = jsonencode({
+    Verson = "2012-10-17",
+    Statement = [
+      {
+        Sid    = "AWSCloudTrailAclCheck",
+        Effect = "Allow",
+        Principal = {
+          Service = "cloudtrail.amazonaws.com"
+        },
+        Action   = "s3:GetBucketAcl",
+        Resource = aws_s3_bucket.cloudtrail_logs[0].arn
+        Condition = {
+          StringEquals = {
+            "aws:SourceArn" = "arn:aws:cloudtrail:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:trail/${local.bucket_name}-access-trail"
+          }
+        }
+      },
+      {
+        Sid    = "AWSCloudTrailWrite",
+        Effect = "Allow",
+        Principal = {
+          Service = "cloudtrail.amazonaws.com"
+        },
+        Action   = "s3:PutObject",
+        Resource = "${aws_s3_bucket.cloudtrail_logs[0].arn}/*",
+        Condition = {
+          StringEquals = {
+            "s3:x-amz-acl"  = "bucket-owner-full-control"
+            "aws:SourceArn" = "arn:aws:cloudtrail:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:trail/${local.bucket_name}-access-trail"
+          }
+        }
+      }
+    ]
+  })
+}
+
+# CloudTrail logs bucket public access block
+resource "aws_s3_bucket_public_access_block" "cloudtrail_logs_pab" {
+  count = var.enable_cloudtrail_logging ? 1 : 0
+
+  bucket = aws_s3_bucket.cloudtrail_logs[0].id
+
+  block_public_acls       = true # Prevent public ACLs
+  block_public_policy     = true # Prevent public bucket policies
+  ignore_public_acls      = true # Ignore any existing public ACLs
+  restrict_public_buckets = true # Restrict public access to the bucket
+}

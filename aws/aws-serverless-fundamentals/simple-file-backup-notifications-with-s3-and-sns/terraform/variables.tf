@@ -1,3 +1,17 @@
+# Input variables for the Simple File Backup Notifications infrastructure
+# The variables allow customization of the deployment for different environments
+
+variable "aws_region" {
+  description = "The AWS where resources will be created"
+  type = string
+  default= "eu-central-1"
+
+  validation {
+    condition    = can(regex("^[a-z]{2}-[a-z]+-[0-9]+$", var.aws_region))
+    error_message = "AWS region must be in valid format (e.g., us-east-1, eu-central-1)."
+  }
+}
+
 variable "environment" {
   description = "The deployment environment (e.g., dev, staging, prod)"
   type        = string
@@ -68,4 +82,45 @@ variable "s3_encryption_algorithm" {
   }
 }
 
-variable "
+variable "s3_lifecycle_expiration_days" {
+  description = "Number of days after which backup files will be automatically delted (0 = disabled)"
+  type        = number
+  default     = 0
+  
+  validation {
+    condition = var.s3_lifecycle_expiration_days >= 0
+    error_message = "Lifecycle expirations days must be 0 or greater."
+  }
+}
+
+variable "notification_event_types" {
+  description = "List of S3 event types that will trigger notifications"
+  type = list(string)
+  default = ["s3:ObjectCreated:*"]
+
+  validation {
+    condition = alltrue([
+      for event in var.notification_event_types : can(regex("^s3:.*$", event))
+    ])
+    error_message = "All event types must be valid S3 event types starting with 's3:'."
+  }
+}
+
+variable "enable_cloudtrail_logging" {
+  description = "Enable CloudTrail logging for S3 bucket access (addiotnal costs apply)"
+  type = bool
+  default = false
+}
+
+variable "tags" {
+  description = "Additional tags to apply to resources"
+  type = map(string)
+  default = {}
+
+  validation {
+    condition = alltrue([
+      for key, value in var.tags : can(regex("^[a-zA-Z0-9\\s._:/=+@-]*$", key)) && can(regex("^[a-zA-Z0-9\\s._:/=+@-]*$", value))
+    ])
+    error_message = "Tags keys and values must contain only letters, numbers, spaces, hyphens, and underscores."
+  }
+}
