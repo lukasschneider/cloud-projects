@@ -104,6 +104,10 @@ resource "aws_s3_bucket" "backup_bucket" {
     prevent_destroy = false
   }
 
+  # Remove this for production
+  force_destroy = true
+
+
   tags = merge(local.common_tags, {
     Name = "Backup Storage Bucket"
     Type = "Storage"
@@ -161,6 +165,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "backup_bucket_lifecycle" {
     expiration {
       days = var.s3_lifecycle_expiration_days
     }
+
+    filter {}
 
     # Also clean up incomplete multipart uploads
     abort_incomplete_multipart_upload {
